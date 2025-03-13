@@ -86,17 +86,26 @@ if [ ! -f "$IMG" ]; then
 
   cp "$PLIST" "$CFG"
 
-  ROM="${MAC//[^[:alnum:]]/}"
-  ROM="${ROM,,}"
-  BROM=$(echo "$ROM" | xxd -r -p | base64)
-  RESOLUTION="${WIDTH}x${HEIGHT}@32"
+  VROM="${MAC_ADDRESS//\:/}"
+  VROM="${MAC_ADDRESS//[^[:alnum:]]/}"
+  VROM="$(awk '{print tolower($0)}' <<< "${VROM}")"
 
-  sed -r -i -e 's|<data>m7zhIYfl</data>|<data>'"${BROM}"'</data>|g' "$CFG"
-  sed -r -i -e 's|<string>iMacPro1,1</string>|<string>'"${MODEL}"'</string>|g' "$CFG"
-  sed -r -i -e 's|<string>C02TM2ZBHX87</string>|<string>'"${SN}"'</string>|g' "$CFG"
-  sed -r -i -e 's|<string>C02717306J9JG361M</string>|<string>'"${MLB}"'</string>|g' "$CFG"
-  sed -r -i -e 's|<string>1920x1080@32</string>|<string>'"${RESOLUTION}"'</string>|g' "$CFG"
-  sed -r -i -e 's|<string>007076A6-F2A2-4461-BBE5-BAD019F8025A</string>|<string>'"${UUID}"'</string>|g' "$CFG"
+  env
+
+  sed -e s/\{\{DEVICE_MODEL\}\}/"${DEVICE_MODEL}"/g \
+                    -e s/\{\{SERIAL\}\}/"${DEVICE_SERIAL}"/g \
+                    -e s/\{\{BOARD_SERIAL\}\}/"${BOARD_SERIAL}"/g \
+                    -e s/\{\{UUID\}\}/"${UUID}"/g \
+                    -e s/\{\{ROM\}\}/"${VROM}"/g \
+                    -e s/\{\{WIDTH\}\}/"${WIDTH}"/g \
+                    -e s/\{\{HEIGHT\}\}/"${HEIGHT}"/g \
+                    -e s/\{\{KERNEL_ARGS\}\}/"${KERNEL_ARGS:-}"/g \
+                    "${PLIST}" > "${CFG}"
+
+
+  cat "${CFG}"
+
+
 
   # Build image
 
@@ -141,10 +150,12 @@ if [ ! -f "$IMG" ]; then
 
   if [[ "$DEBUG" == [Yy1]* ]]; then
     info ""
-    info "Model: $MODEL"
-    info "Rom: $ROM"
-    info "Serial: $SN"
-    info "Board: $MLB"
+    info "DEVICE_MODEL: $DEVICE_MODEL"
+    info "ROM: $VROM"
+    info "DEVICE_SERIAL: $DEVICE_SERIAL"
+    info "BOARD_SERIAL: $BOARD_SERIAL"
+    info "UUID: $UUID"
+    info "MAC_ADDRESS: $MAC_ADDRESS"
     info ""
   fi
 

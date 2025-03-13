@@ -3,14 +3,15 @@ set -Eeuo pipefail
 
 # Docker environment variables
 
-: "${SN:=""}"                # Device serial
-: "${MLB:=""}"               # Board serial
-: "${MAC:=""}"               # MAC address
-: "${UUID:=""}"              # Unique ID
+: "${DEVICE_SERIAL:=""}"                # Device serial SN
+: "${BOARD_SERIAL:=""}"               # Board serial MLB
+: "${MAC_ADDRESS:=""}"               # MAC address MAC
+: "${UUID:=""}"              # Unique ID UUID
 : "${WIDTH:="1920"}"         # Horizontal
 : "${HEIGHT:="1080"}"        # Vertical
 : "${VERSION:="13"}"         # OSX Version
-: "${MODEL:="iMacPro1,1"}"   # Device model
+: "${DEVICE_MODEL:="iMacPro1,1"}"   # Device model MODEL
+: "${VNC_PASS:="12345678"}"   # Device model MODEL
 
 TMP="$STORAGE/tmp"
 BASE_IMG_ID="InstallMedia"
@@ -89,44 +90,85 @@ generateAddress() {
 
   local file="$STORAGE/$PROCESS.mac"
 
-  [ -n "$MAC" ] && return 0
-  [ -s "$file" ] && MAC=$(<"$file")
-  [ -n "$MAC" ] && return 0
+  [ -n "$MAC_ADDRESS" ] && return 0
+  [ -s "$file" ] && MAC_ADDRESS=$(<"$file")
+  [ -n "$MAC_ADDRESS" ] && return 0
 
   # Generate Apple MAC address based on Docker container ID in hostname
-  MAC=$(echo "$HOST" | md5sum | sed 's/^\(..\)\(..\)\(..\)\(..\)\(..\).*$/00:16:cb:\3:\4:\5/')
-  MAC="${MAC^^}" 
-  echo "$MAC" > "$file"
+  MAC_ADDRESS=$(echo "$HOST" | md5sum | sed 's/^\(..\)\(..\)\(..\)\(..\)\(..\).*$/00:16:cb:\3:\4:\5/')
+  MAC_ADDRESS="${MAC_ADDRESS^^}" 
+  echo "$MAC_ADDRESS" > "$file"
 
   return 0
 }
+
+
+generateFiveSerial() {
+  local env_file="$STORAGE/$PROCESS.env.sh"
+
+  echo "generate five serial"
+
+  if [ -s "$env_file" ]; then
+    source "${env_file}"
+    echo "has five serial"
+  else
+    echo "not has five serial"
+    # First check the variable
+    if [ -n "$DEVICE_SERIAL" ] && [ -n "$BOARD_SERIAL" ] && [ -n "$MAC_ADDRESS" ] && [ -n "$UUID" ]; then
+
+      echo "has custom  five serial"
+      return 0
+    fi
+    echo "will generate five serial"
+    # Generate new value
+    /run/generate-unique-machine-values.sh --envs --model "${DEVICE_MODEL}"
+    mv env.sh "${env_file}"
+    source "${env_file}"
+
+    echo "$MAC_ADDRESS" > "$STORAGE/$PROCESS.mac"
+    echo "$DEVICE_SERIAL" > "$STORAGE/$PROCESS.sn"
+    echo "$BOARD_SERIAL" > "$STORAGE/$PROCESS.mlb"
+    echo "$UUID" > "$STORAGE/$PROCESS.id"
+ 
+
+  fi
+
+  echo "${env_file}:"
+  cat "${env_file}"
+
+  local file="$STORAGE/$PROCESS.mac"
+
+  return 0
+}
+
 
 generateSerial() {
 
   local file="$STORAGE/$PROCESS.sn"
   local file2="$STORAGE/$PROCESS.mlb"
 
-  [ -n "$SN" ] && [ -n "$MLB" ] && return 0
-  [ -s "$file" ] && SN=$(<"$file")
-  [ -s "$file2" ] && MLB=$(<"$file2")
-  [ -n "$SN" ] && [ -n "$MLB" ] && return 0
+  [ -n "$DEVICE_SERIAL" ] && [ -n "$BOARD_SERIAL" ] && return 0
+  [ -s "$file" ] && DEVICE_SERIAL=$(<"$file")
+  [ -s "$file2" ] && BOARD_SERIAL=$(<"$file2")
+  [ -n "$DEVICE_SERIAL" ] && [ -n "$BOARD_SERIAL" ] && return 0
 
   # Generate unique serial numbers for machine
-  SN=$(/usr/local/bin/macserial --num 1 --model "${MODEL}" 2>/dev/null)
+  DEVICE_SERIAL=$(/usr/local/bin/macserial --num 1 --model "${DEVICE_MODEL}" 2>/dev/null)
 
-  SN="${SN##*$'\n'}"
-  [[ "$SN" != *" | "* ]] && error "$SN" && return 1
+  DEVICE_SERIAL="${DEVICE_SERIAL##*$'\n'}"
+  [[ "$DEVICE_SERIAL" != *" | "* ]] && error "$DEVICE_SERIAL" && return 1
 
-  MLB=${SN#*|}
-  MLB="${MLB#"${MLB%%[![:space:]]*}"}"
-  SN="${SN%%|*}"
-  SN="${SN%"${SN##*[![:space:]]}"}"
+  BOARD_SERIAL=${DEVICE_SERIAL#*|}
+  BOARD_SERIAL="${BOARD_SERIAL#"${BOARD_SERIAL%%[![:space:]]*}"}"
+  DEVICE_SERIAL="${DEVICE_SERIAL%%|*}"
+  DEVICE_SERIAL="${DEVICE_SERIAL%"${DEVICE_SERIAL##*[![:space:]]}"}"
 
-  echo "$SN" > "$file"
-  echo "$MLB" > "$file2"
+  echo "$DEVICE_SERIAL" > "$file"
+  echo "$BOARD_SERIAL" > "$file2"
 
   return 0
 }
+
 
 if [ ! -f "$BASE_IMG" ] || [ ! -s "$BASE_IMG" ]; then
   if ! downloadImage "$VERSION"; then
@@ -148,17 +190,10 @@ if [ "$VERSION" != "$STORED_VERSION" ]; then
   fi
 fi
 
-if ! generateID; then
-  error "Failed to generate UUID!" && exit 35
+if ! generateFiveSerial ; then
+  error "Failed to generate five serial!" && exit 35
 fi
 
-if ! generateSerial; then
-  error "Failed to generate serialnumber!" && exit 36
-fi
-
-if ! generateAddress; then
-  error "Failed to generate MAC address!" && exit 37
-fi
 
 DISK_OPTS="-device virtio-blk-pci,drive=${BASE_IMG_ID},bus=pcie.0,addr=0x6"
 DISK_OPTS+=" -drive file=$BASE_IMG,id=$BASE_IMG_ID,format=dmg,cache=unsafe,readonly=on,if=none"

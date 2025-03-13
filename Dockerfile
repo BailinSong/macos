@@ -1,8 +1,8 @@
-FROM --platform=$BUILDPLATFORM alpine:3.21 AS builder
+FROM --platform=linux/amd64 alpine:3.21 AS builder
 
 ARG VERSION_OPENCORE="1.0.3"
 ARG REPO_OPENCORE="https://github.com/acidanthera/OpenCorePkg"
-ADD $REPO_OPENCORE/releases/download/$VERSION_OPENCORE/OpenCore-$VERSION_OPENCORE-RELEASE.zip /tmp/opencore.zip
+ADD OpenCore-1.0.3-RELEASE.zip /tmp/opencore.zip
 
 RUN apk --update --no-cache add unzip && \
     unzip /tmp/opencore.zip -d /tmp/oc && \
@@ -22,13 +22,22 @@ ARG DEBCONF_NOWARNINGS="yes"
 ARG DEBIAN_FRONTEND="noninteractive"
 ARG DEBCONF_NONINTERACTIVE_SEEN="true"
 
+RUN rm -f /etc/apt/sources.list.d/* && \
+    echo "deb http://mirrors.aliyun.com/debian/ trixie main contrib non-free" > /etc/apt/sources.list && \
+    echo "deb http://mirrors.aliyun.com/debian/ trixie-updates main contrib non-free" >> /etc/apt/sources.list && \
+    echo "deb http://security.debian.org/debian-security trixie-security main contrib non-free" >> /etc/apt/sources.list && \
+    echo "deb http://mirrors.aliyun.com/debian/ trixie-backports main contrib non-free" >> /etc/apt/sources.list
+
+
 RUN set -eu && \
     apt-get update && \
     apt-get --no-install-recommends -y install \
     xxd \
     fdisk \
     mtools \
-    python3 && \
+    curl \
+    python3 \
+    git &&\
     apt-get clean && \
     echo "$VERSION_ARG" > /run/version && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
@@ -38,12 +47,12 @@ COPY --chmod=755 ./assets /assets/
 COPY --chmod=755 --from=builder /macserial /usr/local/bin/
 
 ADD --chmod=644 \
-    $REPO_OSX_KVM/$VERSION_OSX_KVM/OVMF_CODE.fd \
-    $REPO_OSX_KVM/$VERSION_OSX_KVM/OVMF_VARS.fd \
-    $REPO_OSX_KVM/$VERSION_OSX_KVM/OVMF_VARS-1024x768.fd \
-    $REPO_OSX_KVM/$VERSION_OSX_KVM/OVMF_VARS-1920x1080.fd /usr/share/OVMF/
+    OVMF_CODE.fd \
+    OVMF_VARS.fd \
+    OVMF_VARS-1024x768.fd \
+    OVMF_VARS-1920x1080.fd /usr/share/OVMF/
 
-ADD $REPO_KVM_OPENCORE/releases/download/$VERSION_KVM_OPENCORE/OpenCore-$VERSION_KVM_OPENCORE.iso.gz /opencore.iso.gz
+ADD OpenCore-v21.iso.gz /opencore.iso.gz
 
 VOLUME /storage
 EXPOSE 8006 5900
